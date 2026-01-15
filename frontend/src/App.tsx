@@ -22,9 +22,21 @@ type ValidateResponse = {
       }
     | {
         matched: false
+        error?: boolean
         skipped?: boolean
         reason?: string
       }
+}
+
+type ResultVariant = 'success' | 'warning' | 'danger'
+
+type ResultCard = {
+  variant: ResultVariant
+  title: string
+  message: string
+  identitySourceLabel?: string
+  sheetLabel?: string
+  sheetHint?: string
 }
 
 const apiBaseUrl = String(import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/g, '')
@@ -37,7 +49,7 @@ function App() {
   const [verificationDigit, setVerificationDigit] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [matchMessage, setMatchMessage] = useState<string | null>(null)
+  const [result, setResult] = useState<ResultCard | null>(null)
   const [sheetCode, setSheetCode] = useState<string | null>(null)
   const [canRequestCode, setCanRequestCode] = useState(false)
   const [codeModalOpen, setCodeModalOpen] = useState(false)
@@ -82,7 +94,7 @@ function App() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setMatchMessage(null)
+    setResult(null)
     setSheetCode(null)
     setCanRequestCode(false)
     setCodeModalOpen(false)
@@ -127,6 +139,10 @@ function App() {
         return
       }
 
+      const identitySource = json.identitySource ?? 'consultasperu'
+      const identitySourceLabel =
+        identitySource === 'decolecta' ? 'RENIEC (Decolecta)' : 'ConsultasPeru'
+
       const apiName = normalizeText(String(json.consultasPeru?.name ?? ''))
       const apiSurname = normalizeText(String(json.consultasPeru?.surname ?? ''))
       const apiDigit = String(json.consultasPeru?.verification_code ?? '').trim()
@@ -149,25 +165,56 @@ function App() {
       const maskedEmail = json.sheet?.matched ? json.sheet.emailMasked : undefined
       const codeFromSheet = json.sheet?.matched ? (json.sheet.code ?? null) : null
 
+      const sheetLabel =
+        json.sheet?.matched
+          ? maskedEmail
+            ? `Correo registrado (${maskedEmail})`
+            : 'Correo registrado'
+          : json.sheet && 'error' in json.sheet && json.sheet.error
+            ? 'Google Sheets: error'
+            : json.sheet && 'skipped' in json.sheet && json.sheet.skipped
+              ? 'Google Sheets: omitido'
+              : 'Correo no registrado'
+
+      const sheetHint =
+        json.sheet && 'reason' in json.sheet && json.sheet.reason
+          ? String(json.sheet.reason)
+          : undefined
+
       if (!matchesIdentity) {
-        setMatchMessage(
-          apiDigit.length > 0
-            ? 'Los datos ingresados no coinciden con la consulta.'
-            : 'Los datos ingresados no coinciden con la consulta (sin dígito de verificación disponible).' 
-        )
+        setResult({
+          variant: 'danger',
+          title: 'Verificación no confirmada',
+          message:
+            apiDigit.length > 0
+              ? 'Los datos ingresados no coinciden con la consulta.'
+              : 'Los datos ingresados no coinciden con la consulta (sin dígito de verificación disponible).',
+          identitySourceLabel,
+          sheetLabel,
+          sheetHint,
+        })
       } else if (matchesSheet) {
-        setMatchMessage(
-          `Confirmación: los datos coinciden y el correo está registrado${
-            maskedEmail ? ` (${maskedEmail})` : ''
-          }.`
-        )
+        setResult({
+          variant: 'success',
+          title: 'Confirmación',
+          message: 'Los datos coinciden y el correo está registrado.',
+          identitySourceLabel,
+          sheetLabel,
+          sheetHint,
+        })
 
         setSheetCode(codeFromSheet)
         setCanRequestCode(Boolean(codeFromSheet))
       } else {
-        setMatchMessage(
-          'Los datos coinciden, pero no se encontró un correo registrado que empiece con el DNI.'
-        )
+        setResult({
+          variant: 'warning',
+          title: 'Identidad validada',
+          message:
+            'Los datos coinciden, pero no se encontró un correo registrado que empiece con el DNI.',
+          identitySourceLabel,
+          sheetLabel,
+          sheetHint,
+        })
       }
 
     } catch {
@@ -266,7 +313,7 @@ function App() {
                   setSurname('')
                   setVerificationDigit('')
                   setError(null)
-                  setMatchMessage(null)
+                  setResult(null)
                   setSheetCode(null)
                   setCanRequestCode(false)
                   setCodeModalOpen(false)
@@ -284,27 +331,119 @@ function App() {
             </div>
           ) : null}
 
-          {matchMessage ? (
+          {result ? (
             <div
-              className={
-                matchMessage.startsWith('Confirmación')
-                  ? 'notice noticeSuccess'
-                  : 'notice noticeWarning'
-              }
+              className={`resultCard result${result.variant}`}
               role="status"
+              aria-label="Resultado de validación"
             >
-              <div className="noticeRow">
-                <div>{matchMessage}</div>
+              <div className="resultTop">
+                <div className="resultTitleRow">
+                  <div className="resultIcon" aria-hidden="true">
+                    {result.variant === 'success' ? (
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M20 6 9 17l-5-5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : result.variant === 'warning' ? (
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M12 9v4"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M12 17h.01"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M10.3 4.3 2.8 17.2A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M15 9l-6 6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M9 9l6 6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </div>
+
+                  <div className="resultHead">
+                    <div className="resultTitle">{result.title}</div>
+                    <div className="resultMeta">
+                      {result.identitySourceLabel ? (
+                        <span className="chip">Fuente: {result.identitySourceLabel}</span>
+                      ) : null}
+                      {result.sheetLabel ? (
+                        <span className="chip chipMuted">{result.sheetLabel}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
                 {canRequestCode ? (
                   <button
                     type="button"
-                    className="button small"
+                    className="button small primary"
                     onClick={() => setCodeModalOpen(true)}
                   >
                     Solicitar contraseña
                   </button>
                 ) : null}
               </div>
+
+              <div className="resultMessage">{result.message}</div>
+
+              {result.sheetHint ? (
+                <div className="resultHint">{result.sheetHint}</div>
+              ) : null}
             </div>
           ) : null}
         </section>
