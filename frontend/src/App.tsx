@@ -42,6 +42,7 @@ function App() {
   const [canRequestCode, setCanRequestCode] = useState(false)
   const [codeModalOpen, setCodeModalOpen] = useState(false)
   const [codeVisible, setCodeVisible] = useState(false)
+  const [copyMessage, setCopyMessage] = useState<string | null>(null)
 
   function onDniChange(value: string) {
     // Keep only digits and limit to 8 characters.
@@ -86,6 +87,7 @@ function App() {
     setCanRequestCode(false)
     setCodeModalOpen(false)
     setCodeVisible(false)
+    setCopyMessage(null)
 
     const cleaned = dni.trim()
     if (!/^\d{8}$/.test(cleaned)) {
@@ -340,6 +342,63 @@ function App() {
                   <button
                     type="button"
                     className="iconButton"
+                    aria-label="Copiar código"
+                    onClick={async () => {
+                      if (!sheetCode) return
+
+                      try {
+                        if (navigator.clipboard?.writeText) {
+                          await navigator.clipboard.writeText(sheetCode)
+                        } else {
+                          const textarea = document.createElement('textarea')
+                          textarea.value = sheetCode
+                          textarea.setAttribute('readonly', '')
+                          textarea.style.position = 'fixed'
+                          textarea.style.top = '0'
+                          textarea.style.left = '0'
+                          textarea.style.opacity = '0'
+                          document.body.appendChild(textarea)
+                          textarea.select()
+                          document.execCommand('copy')
+                          document.body.removeChild(textarea)
+                        }
+
+                        setCopyMessage('Copiado al portapapeles')
+                        window.setTimeout(() => setCopyMessage(null), 1500)
+                      } catch {
+                        setCopyMessage('No se pudo copiar')
+                        window.setTimeout(() => setCopyMessage(null), 2000)
+                      }
+                    }}
+                    disabled={!sheetCode}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M9 9h10v12H9V9Z"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="iconButton"
                     aria-label={codeVisible ? 'Ocultar código' : 'Mostrar código'}
                     onClick={() => setCodeVisible((v) => !v)}
                     disabled={!sheetCode}
@@ -412,6 +471,12 @@ function App() {
                 <div className="modalHint">
                   Por seguridad, el código se muestra censurado por defecto.
                 </div>
+
+                {copyMessage ? (
+                  <div className="modalHint" role="status">
+                    {copyMessage}
+                  </div>
+                ) : null}
 
                 <div className="modalActions">
                   <button
