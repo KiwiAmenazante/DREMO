@@ -26,6 +26,9 @@ type ValidateResponse = {
       }
 }
 
+const apiBaseUrl = String(import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/g, '')
+const validateDniUrl = apiBaseUrl ? `${apiBaseUrl}/api/validate-dni` : '/api/validate-dni'
+
 function App() {
   const [dni, setDni] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -109,7 +112,7 @@ function App() {
 
     setLoading(true)
     try {
-      const resp = await fetch('/api/validate-dni', {
+      const resp = await fetch(validateDniUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dni: cleaned }),
