@@ -1,4 +1,6 @@
 import { google } from 'googleapis';
+import fs from 'fs';
+import path from 'path';
 
 function getRequiredEnv(name) {
   const value = process.env[name];
@@ -39,6 +41,15 @@ async function getSheetsClient() {
     throw new Error(
       'Google Sheets credentials missing (set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_KEY_FILE)'
     );
+  }
+
+  if ('keyFile' in authOptions) {
+    const resolvedKeyFile = path.resolve(process.cwd(), authOptions.keyFile);
+    if (!fs.existsSync(resolvedKeyFile)) {
+      throw new Error(
+        `Google Sheets key file not found at ${resolvedKeyFile}. On Render, set GOOGLE_SERVICE_ACCOUNT_JSON instead of GOOGLE_SERVICE_ACCOUNT_KEY_FILE.`
+      );
+    }
   }
 
   const auth =
