@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { queryConsultasPeruDni } from '../services/consultasPeru.js';
+import { queryDecolectaDni } from '../services/decolecta.js';
 import { findCodeByDniEmailPrefix } from '../services/googleSheets.js';
 
 const BodySchema = z.object({
@@ -22,13 +23,34 @@ export async function validateDniHandler(req, res) {
   const { dni } = parsed.data;
 
   try {
-    const consultas = await queryConsultasPeruDni(dni);
+    const primary = await queryConsultasPeruDni(dni);
 
-    if (!consultas.success) {
-      return res.status(502).json({
-        success: false,
-        message: consultas.message ?? 'Upstream API error',
-      });
+    let identity = primary;
+    let identitySource = 'consultasperu';
+
+    if (!primary.success) {
+      const fallback = await queryDecolectaDni(dni);
+
+      if (fallback.success) {
+        identitySource = 'decolecta';
+        identity = {
+          success: true,
+          data: {
+            number: fallback.data.document_number ?? null,
+            full_name: fallback.data.full_name ?? null,
+            name: fallback.data.first_name ?? null,
+            surname: `${fallback.data.first_last_name ?? ''} ${fallback.data.second_last_name ?? ''}`
+              .trim()
+              .replace(/\s+/g, ' ') || null,
+            verification_code: null,
+          },
+        };
+      } else {
+        return res.status(502).json({
+          success: false,
+          message: primary.message ?? fallback.message ?? 'Upstream API error',
+        });
+      }
     }
 
     const sheetMatch = await findCodeByDniEmailPrefix(dni);
@@ -37,7 +59,8 @@ export async function validateDniHandler(req, res) {
       success: true,
       message: 'OK',
       dni,
-      consultasPeru: consultas.data,
+      identitySource,
+      consultasPeru: identity.data,
       sheet: sheetMatch,
     });
   } catch (err) {

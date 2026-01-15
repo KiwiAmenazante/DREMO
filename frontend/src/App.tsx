@@ -5,6 +5,7 @@ type ValidateResponse = {
   success: boolean
   message?: string
   dni?: string
+  identitySource?: 'consultasperu' | 'decolecta'
   consultasPeru?: {
     number?: string
     full_name?: string
@@ -105,8 +106,8 @@ function App() {
     }
 
     const cleanedDigit = verificationDigit.trim()
-    if (!/^\d$/.test(cleanedDigit)) {
-      setError('Ingresa el dígito identificador (1 dígito).')
+    if (cleanedDigit && !/^\d$/.test(cleanedDigit)) {
+      setError('El dígito identificador debe ser 1 dígito (opcional).')
       return
     }
 
@@ -132,20 +133,26 @@ function App() {
       const inputSurname = normalizeText(cleanedSurname)
       const inputDigit = cleanedDigit
 
-      const matchesIdentity =
+      const baseMatches =
         apiName.length > 0 &&
         apiSurname.length > 0 &&
-        apiDigit.length > 0 &&
         apiName === inputName &&
-        apiSurname === inputSurname &&
-        apiDigit === inputDigit
+        apiSurname === inputSurname
+
+      const digitMatches = apiDigit.length > 0 ? apiDigit === inputDigit : true
+
+      const matchesIdentity = baseMatches && digitMatches
 
       const matchesSheet = Boolean(json.sheet?.matched)
       const maskedEmail = json.sheet?.matched ? json.sheet.emailMasked : undefined
       const codeFromSheet = json.sheet?.matched ? (json.sheet.code ?? null) : null
 
       if (!matchesIdentity) {
-        setMatchMessage('Los datos ingresados no coinciden con la consulta.')
+        setMatchMessage(
+          apiDigit.length > 0
+            ? 'Los datos ingresados no coinciden con la consulta.'
+            : 'Los datos ingresados no coinciden con la consulta (sin dígito de verificación disponible).' 
+        )
       } else if (matchesSheet) {
         setMatchMessage(
           `Confirmación: los datos coinciden y el correo está registrado${
